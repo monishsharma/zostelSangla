@@ -1,0 +1,12 @@
+{
+  "name": "zostel-sangla-monitor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Monitor Zostel Sangla booking availability",
+  "scripts": {
+    "check": "node checker.js"
+  },
+  "dependencies": {
+    "playwright": "^1.56.1"
+  }
+}
