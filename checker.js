@@ -46,7 +46,9 @@ async function main() {
   const response = await fetch(API_URL, {
     headers: {
       Authorization: `Bearer ${token}`,
-      Accept: "application/json"
+      Accept: "application/json",
+      "HTTP_CLIENT_USER_ID": process.env.ZOSTEL_CLIENT_USER_ID,
+      "HTTP_CLIENT_APP_ID": process.env.ZOSTEL_CLIENT_APP_ID
     },
     signal: AbortSignal.timeout(30000)
   });
