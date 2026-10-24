@@ -1,9 +1,14 @@
 
-const BOOKING_URL =
-  "https://www.zostel.com/destination/sangla/stay/zostel-sangla-sngh084?checkin=2026-12-31&checkout=2027-01-01";
-
 const API_URL =
-  "https://api.zostel.com/api/v1/stay/offered/rooms/?checkin=2026-12-31&checkout=2027-01-01&property_code=SNGH084";
+  "https://api.zostel.com/api/v1/stay/offered/availability/" +
+  "?checkin=2026-12-31" +
+  "&checkout=2027-01-08" +
+  "&property_code=zostel-sangla-sngh084" +
+  "&room_ids=919";
+
+const BOOKING_URL =
+  "https://www.zostel.com/destination/sangla/stay/" +
+  "zostel-sangla-sngh084?checkin=2026-12-31&checkout=2027-01-08";
 
 async function sendTelegram(message) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -17,7 +22,9 @@ async function sendTelegram(message) {
     `https://api.telegram.org/bot${token}/sendMessage`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json"
+      },
       body: JSON.stringify({
         chat_id: chatId,
         text: message,
@@ -30,23 +37,25 @@ async function sendTelegram(message) {
   const result = await response.json();
 
   if (!response.ok || !result.ok) {
-  console.error(
-    "Telegram API status:",
-    response.status
-  );
-  console.error(
-    "Telegram API response:",
-    JSON.stringify(result)
-  );
-
-  throw new Error(
-    `Telegram notification failed: ${
+    console.error(
+      "Telegram API error:",
       result.description || response.status
-    }`
-  );
+    );
+    throw new Error("Telegram notification failed.");
+  }
+
+  console.log("Telegram message sent.");
 }
 
-  console.log("Telegram notification sent.");
+async function notifyError(message) {
+  try {
+    await sendTelegram(message);
+  } catch (error) {
+    console.error(
+      "Could not send Telegram error notification:",
+      error.message
+    );
+  }
 }
 
 async function main() {
@@ -55,10 +64,7 @@ async function main() {
   const clientAppId = process.env.ZOSTEL_CLIENT_APP_ID;
 
   if (!token || !clientUserId || !clientAppId) {
-    throw new Error(
-      "Missing Zostel secrets. Check ZOSTEL_API_TOKEN, " +
-      "ZOSTEL_CLIENT_USER_ID and ZOSTEL_CLIENT_APP_ID."
-    );
+    throw new Error("One or more Zostel secrets are missing.");
   }
 
   let response;
@@ -69,17 +75,20 @@ async function main() {
         Authorization: `Bearer ${token}`,
         Accept: "application/json",
         "client-user-id": clientUserId,
-        "client-app-id": clientAppId
+        "client-app-id": clientAppId,
+        Origin: "https://www.zostel.com",
+        Referer: "https://www.zostel.com/"
       },
       signal: AbortSignal.timeout(30000)
     });
   } catch (error) {
-    await sendTelegram(
+    await notifyError(
       "⚠️ ZOSTEL SANGLA CHECK FAILED\n\n" +
-      "Could not connect to Zostel's API.\n" +
-      "Error: " + error.message +
-      "\n\nPrivate-room availability could not be verified."
+      "Could not connect to the availability API.\n" +
+      `Reason: ${error.message}\n\n` +
+      "Availability could not be verified."
     );
+
     throw error;
   }
 
@@ -88,17 +97,17 @@ async function main() {
     const errorBody = await response.text();
 
     console.error("Zostel API status:", status);
-    console.error("Zostel API error:", errorBody);
+    console.error("Zostel API response:", errorBody);
 
     const reason =
       status === 401 || status === 403
-        ? "Authentication failed. The Zostel token may have expired or been invalidated."
+        ? "🔑 Authentication failed. Your Zostel token may have expired or been invalidated."
         : `Zostel API returned HTTP ${status}.`;
 
-    await sendTelegram(
+    await notifyError(
       "⚠️ ZOSTEL SANGLA CHECK FAILED\n\n" +
       reason +
-      "\n\nPrivate-room availability could not be verified."
+      "\n\nThe daily availability report could not be generated."
     );
 
     throw new Error(`Zostel API returned HTTP ${status}`);
@@ -109,22 +118,34 @@ async function main() {
   try {
     data = await response.json();
   } catch {
-    await sendTelegram(
+    await notifyError(
       "⚠️ ZOSTEL SANGLA CHECK FAILED\n\n" +
-      "The API response was not valid JSON. " +
-      "Private-room availability could not be verified."
+      "The API returned invalid JSON. Availability could not be verified."
     );
+
     throw new Error("Invalid JSON from Zostel API.");
   }
 
-  if (!Array.isArray(data.rooms)) {
-    await sendTelegram(
+  if (!Array.isArray(data.availability)) {
+    await notifyError(
       "⚠️ ZOSTEL SANGLA CHECK FAILED\n\n" +
-      "Unexpected API response format. " +
-      "Private-room availability could not be verified."
+      "Unexpected API response format. Availability could not be verified."
     );
-    throw new Error("Unexpected Zostel API response.");
+
+    throw new Error("Unexpected availability response.");
   }
+
+  // Build the eight dates we want in the daily report.
+  const dates = [
+    ["2026-12-31", "31 Dec"],
+    ["2027-01-01", "1 Jan"],
+    ["2027-01-02", "2 Jan"],
+    ["2027-01-03", "3 Jan"],
+    ["2027-01-04", "4 Jan"],
+    ["2027-01-05", "5 Jan"],
+    ["2027-01-06", "6 Jan"],
+    ["2027-01-07", "7 Jan"]
+  ];
 
   const checkedAt = new Date().toLocaleString("en-IN", {
     timeZone: "Asia/Kolkata",
@@ -132,55 +153,37 @@ async function main() {
     timeStyle: "short"
   });
 
-  // Always check private rooms only; ignore all dorm beds.
-  const privateRooms = data.rooms.filter(
-    room => room.sub_category === "private-room"
-  );
+  const lines = dates.map(([date, label]) => {
+    const entry = data.availability.find(
+      item =>
+        item.date === date &&
+        Number(item.room_id) === 919
+    );
 
-  const availableRooms = privateRooms.filter(room =>
-    room.status === "active" &&
-    room.availability?.available === true &&
-    room.availability?.bookable === true &&
-    Number(room.availability?.units) > 0
-  );
+    if (!entry) {
+      return `${label} — ⚠️ No availability data returned`;
+    }
 
-  console.log("Total room types:", data.rooms.length);
-  console.log("Private room types:", privateRooms.length);
-  console.log("Bookable private room types:", availableRooms.length);
+    const isAvailable =
+      entry.available === true &&
+      Number(entry.units) > 0;
 
-  let message;
+    return isAvailable
+      ? `${label} — ✅ AVAILABLE (${entry.units} units, ₹${entry.price})`
+      : `${label} — ❌ NOT AVAILABLE`;
+  });
 
-  if (availableRooms.length > 0) {
-    const roomDetails = availableRooms.map(room => {
-      const price = room.price?.final;
-      const priceText =
-        price != null ? `₹${price}` : "Price unavailable";
-
-      return (
-        `• ${room.name}\n` +
-        `  Available units: ${room.availability.units}\n` +
-        `  Listed price: ${priceText}`
-      );
-    }).join("\n\n");
-
-    message =
-      "🎉 ZOSTEL SANGLA — PRIVATE ROOM AVAILABLE!\n\n" +
-      "📅 31 Dec 2026 – 1 Jan 2027\n" +
-      `🕒 Checked: ${checkedAt}\n\n` +
-      roomDetails +
-      "\n\nBook now:\n" + BOOKING_URL;
-  } else {
-    message =
-      "ℹ️ ZOSTEL SANGLA — DAILY UPDATE\n\n" +
-      "📅 31 Dec 2026 – 1 Jan 2027\n" +
-      `🕒 Checked: ${checkedAt}\n` +
-      `🏠 Private room types checked: ${privateRooms.length}\n` +
-      "❌ No bookable private rooms found today.\n\n" +
-      "Dorm beds are excluded from this check.\n\n" +
-      "Booking page:\n" + BOOKING_URL;
-  }
+  const message =
+    "🏔️ ZOSTEL SANGLA — DAILY PRIVATE ROOM REPORT\n\n" +
+    "🛏️ Room: Deluxe Room (ID 919)\n" +
+    "📅 31 Dec 2026 – 7 Jan 2027\n\n" +
+    lines.join("\n") +
+    "\n\n🕒 Checked: " + checkedAt +
+    "\n\n🔗 Booking page:\n" + BOOKING_URL;
 
   await sendTelegram(message);
+
+  console.log("Daily availability report sent.");
 }
 
 main().catch(error => {
