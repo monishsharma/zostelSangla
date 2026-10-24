@@ -47,8 +47,8 @@ async function main() {
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: "application/json",
-      "HTTP_CLIENT_USER_ID": process.env.ZOSTEL_CLIENT_USER_ID,
-      "HTTP_CLIENT_APP_ID": process.env.ZOSTEL_CLIENT_APP_ID
+      "client-user-id": process.env.ZOSTEL_CLIENT_USER_ID,
+      "client-app-id": process.env.ZOSTEL_CLIENT_APP_ID
     },
     signal: AbortSignal.timeout(30000)
   });
