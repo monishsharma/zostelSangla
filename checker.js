@@ -10,17 +10,25 @@ const BOOKING_URL =
   "https://www.zostel.com/destination/sangla/stay/" +
   "zostel-sangla-sngh084?checkin=2026-12-31&checkout=2027-01-08";
 
+
 async function sendTelegram(message) {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
+  const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
+  const chatId = process.env.TELEGRAM_CHAT_ID?.trim();
 
   if (!token || !chatId) {
-    throw new Error("Telegram secrets are missing.");
+    throw new Error(
+      "Telegram secrets are missing or empty. Check TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID."
+    );
   }
 
-  const response = await fetch(
-    `https://api.telegram.org/bot${token}/sendMessage`,
-    {
+  const telegramUrl =
+    `https://api.telegram.org/bot${token}/sendMessage`;
+
+  let response;
+  let result;
+
+  try {
+    response = await fetch(telegramUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -31,21 +39,31 @@ async function sendTelegram(message) {
         disable_web_page_preview: true
       }),
       signal: AbortSignal.timeout(30000)
-    }
-  );
+    });
 
-  const result = await response.json();
-
-  if (!response.ok || !result.ok) {
-    console.error(
-      "Telegram API error:",
-      result.description || response.status
+    result = await response.json();
+  } catch (error) {
+    throw new Error(
+      `Could not reach Telegram API or parse its response: ${error.message}`
     );
-    throw new Error("Telegram notification failed.");
   }
 
-  console.log("Telegram message sent.");
+  if (!response.ok || !result.ok) {
+    const description =
+      result.description || "Unknown Telegram API error";
+
+    console.error("Telegram HTTP status:", response.status);
+    console.error("Telegram API description:", description);
+    console.error("Telegram error code:", result.error_code || "unknown");
+
+    throw new Error(
+      `Telegram API returned HTTP ${response.status}: ${description}`
+    );
+  }
+
+  console.log("Telegram message sent successfully.");
 }
+
 
 async function notifyError(message) {
   try {
