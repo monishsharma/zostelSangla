@@ -61,8 +61,13 @@ async function main() {
   }
 
   if (!response.ok) {
-    throw new Error(`Zostel API returned HTTP ${response.status}`);
-  }
+  const errorBody = await response.text();
+
+  console.error("Zostel API status:", response.status);
+  console.error("Zostel API error body:", errorBody);
+
+  throw new Error(`Zostel API returned HTTP ${response.status}`);
+}
 
   const data = await response.json();
 
