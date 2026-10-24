@@ -256,7 +256,7 @@ async function main() {
   const message =
     "🏔️ ZOSTEL SANGLA — DAILY ROOM REPORT\n\n" +
     "🛏️ Room: Deluxe Room (ID 919)\n" +
-    "📅 31 Dec 2026 – 7 Jan 2027\n\n" +
+    "📅 31 Dec 2026 – 3 Jan 2027\n\n" +
     lines.join("\n") +
     "\n\n🕒 Checked: " + checkedAt +
     "\n\n🔗 Booking page:\n" + BOOKING_URL;
