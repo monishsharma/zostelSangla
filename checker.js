@@ -1,15 +1,19 @@
 
 const { chromium } = require("playwright");
 
+
 const BOOKING_URL =
   "https://www.zostel.com/destination/sangla/stay/zostel-sangla-sngh084?checkin=2026-12-31&checkout=2027-01-01";
+
+const API_URL =
+  "https://api.zostel.com/api/v1/stay/offered/rooms/?checkin=2026-12-31&checkout=2027-01-01&property_code=SNGH084";
 
 async function sendTelegram(message) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
 
   if (!token || !chatId) {
-    throw new Error("Missing Telegram GitHub Secrets.");
+    throw new Error("Telegram secrets are missing.");
   }
 
   const response = await fetch(
@@ -28,43 +32,74 @@ async function sendTelegram(message) {
   const result = await response.json();
 
   if (!response.ok || !result.ok) {
-    throw new Error("Telegram notification failed.");
+    throw new Error("Telegram message could not be sent.");
   }
 }
 
 async function main() {
-  const browser = await chromium.launch({ headless: true });
+  const token = process.env.ZOSTEL_API_TOKEN;
 
-  try {
-    const page = await browser.newPage();
-    await page.goto(BOOKING_URL, {
-      waitUntil: "domcontentloaded",
-      timeout: 60000
-    });
+  if (!token) {
+    throw new Error("ZOSTEL_API_TOKEN secret is missing.");
+  }
 
-    await page.waitForTimeout(5000);
+  const response = await fetch(API_URL, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json"
+    },
+    signal: AbortSignal.timeout(30000)
+  });
 
-    const pageInfo = await page.evaluate(() => ({
-      title: document.title,
-      url: location.href,
-      text: document.body.innerText.slice(0, 12000)
-    }));
-
-    console.log("Page title:", pageInfo.title);
-    console.log("Final URL:", pageInfo.url);
-    console.log("Page text:\n", pageInfo.text);
-
-    // Deliberately do not declare availability from page text alone.
-    // We must verify Zostel's real booking/room-selection flow first.
-    console.log(
-      "STATUS: UNVERIFIED — inspect the booking flow before alerting."
+  if (response.status === 401 || response.status === 403) {
+    await sendTelegram(
+      "⚠️ Zostel Sangla checker: API authentication failed. " +
+      "The token may have expired or been invalidated. " +
+      "Please refresh it and update ZOSTEL_API_TOKEN."
     );
-  } finally {
-    await browser.close();
+    throw new Error(`Zostel API authentication failed: ${response.status}`);
+  }
+
+  if (!response.ok) {
+    throw new Error(`Zostel API returned HTTP ${response.status}`);
+  }
+
+  const data = await response.json();
+
+  if (!Array.isArray(data.rooms)) {
+    throw new Error("Unexpected Zostel API response; availability not verified.");
+  }
+
+  const availableRooms = data.rooms.filter(room =>
+    room.status === "active" &&
+    room.availability?.available === true &&
+    room.availability?.bookable === true &&
+    Number(room.availability?.units) > 0
+  );
+
+  console.log(`Rooms checked: ${data.rooms.length}`);
+  console.log(`Bookable room types: ${availableRooms.length}`);
+
+  if (availableRooms.length > 0) {
+    const roomDetails = availableRooms.map(room =>
+      `• ${room.name}: ${room.availability.units} available, ₹${room.price?.final ?? "price unavailable"}`
+    ).join("\n");
+
+    await sendTelegram(
+      "🎉 ZOSTEL SANGLA AVAILABILITY ALERT!\n\n" +
+      "📅 31 Dec 2026 – 1 Jan 2027\n\n" +
+      roomDetails +
+      "\n\nBook now:\n" + BOOKING_URL
+    );
+
+    console.log("Availability alert sent.");
+  } else {
+    console.log("No bookable rooms found.");
   }
 }
 
-main().catch((error) => {
-  console.error("Availability check failed:", error.message);
+main().catch(async error => {
+  console.error("Checker failed:", error.message);
   process.exitCode = 1;
 });
+
