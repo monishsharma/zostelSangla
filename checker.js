@@ -55,8 +55,8 @@ async function main() {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: "application/json",
-        HTTP_CLIENT_USER_ID: clientUserId,
-        HTTP_CLIENT_APP_ID: clientAppId
+        "client-user-id": clientUserId,
+        "client-app-id": clientAppId
       },
       signal: AbortSignal.timeout(30000)
     });
