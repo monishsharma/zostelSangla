@@ -4,7 +4,7 @@ name: Zostel Sangla Availability Check
 on:
   workflow_dispatch:
   schedule:
-    - cron: "37 3 * * *"
+    - cron: "30 7 * * *"
 
 permissions:
   contents: read
