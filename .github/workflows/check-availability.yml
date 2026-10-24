@@ -4,7 +4,7 @@ name: Zostel Sangla Availability Check
 on:
   workflow_dispatch:
   schedule:
-    - cron: "30 3 * * *"
+    - cron: "37 3 * * *"
 
 permissions:
   contents: read
@@ -26,10 +26,7 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium
-
-      - name: Check Zostel booking page
+      - name: Check Zostel availability
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
