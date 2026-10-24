@@ -30,8 +30,21 @@ async function sendTelegram(message) {
   const result = await response.json();
 
   if (!response.ok || !result.ok) {
-    throw new Error("Telegram notification failed.");
-  }
+  console.error(
+    "Telegram API status:",
+    response.status
+  );
+  console.error(
+    "Telegram API response:",
+    JSON.stringify(result)
+  );
+
+  throw new Error(
+    `Telegram notification failed: ${
+      result.description || response.status
+    }`
+  );
+}
 
   console.log("Telegram notification sent.");
 }
